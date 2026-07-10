@@ -51,6 +51,60 @@ export const EJERLAV = [
   "Roskilde Bygrunde",
 ];
 
+/**
+ * Fælles ejer-profil for en adresse, så MockEjerClient og
+ * MockStatstidendeClient fortæller den samme historie.
+ */
+export function mockEjerProfil(seed: string) {
+  const ejertype = pick(seed, "ejertype", [
+    "selskab",
+    "selskab",
+    "privatperson",
+    "privatperson",
+    "doedsbo",
+  ] as const);
+  return {
+    ejertype,
+    overtagelsesAar: seeded(seed, "overtagelse", 1985, 2023),
+    /** Enkelte selskaber "glemmer" at indlevere regnskab - også et distress-signal */
+    manglerRegnskab: seeded(seed, "regnskabmangler", 0, 100) > 82,
+  };
+}
+
+/**
+ * Selskabsstatus seedet af CVR-nummeret, så MockEjerClient og
+ * MockStatstidendeClient (der kun kender CVR-nummeret) er enige.
+ */
+export function mockCvrStatus(cvrNummer: string) {
+  return pick("cvr-" + cvrNummer, "status", [
+    "Normal",
+    "Normal",
+    "Normal",
+    "Normal",
+    "Under tvangsopløsning",
+    "Under konkurs",
+  ] as const);
+}
+
+/** Gadenavne pr. postnr til områdescreeningens mock-adresser */
+export const SCREENING_GADER: Record<string, string[]> = {
+  "2200": ["Nørrebrogade", "Jagtvej", "Stefansgade", "Fælledvej", "Ravnsborggade", "Elmegade", "Guldbergsgade"],
+  "2400": ["Frederikssundsvej", "Tomsgårdsvej", "Rentemestervej", "Provstevej", "Mågevej", "Glasvej"],
+  "1620": ["Vesterbrogade", "Istedgade", "Gasværksvej", "Viktoriagade", "Eskildsgade"],
+  "8000": ["Søndergade", "Jægergårdsgade", "Vestergade", "Mejlgade", "Studsgade", "Graven"],
+  "5000": ["Vestergade", "Kongensgade", "Nørregade", "Overgade", "Vindegade"],
+  "9000": ["Danmarksgade", "Vesterbro", "Boulevarden", "Algade", "Kayerødsgade"],
+};
+
+export const SCREENING_POSTNRE: { postnr: string; navn: string }[] = [
+  { postnr: "2200", navn: "København N (Nørrebro)" },
+  { postnr: "2400", navn: "København NV (Nordvest)" },
+  { postnr: "1620", navn: "København V (Vesterbro)" },
+  { postnr: "8000", navn: "Aarhus C" },
+  { postnr: "5000", navn: "Odense C" },
+  { postnr: "9000", navn: "Aalborg" },
+];
+
 /** Basis-kvm-priser pr. postnr-gruppe (mock af Finans Danmark-statistik) */
 export function basisKvmPris(postnr: string): number {
   const p = parseInt(postnr, 10);

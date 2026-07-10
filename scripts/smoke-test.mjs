@@ -66,6 +66,44 @@ if (!(await page.textContent("body")).includes("Investeringscase")) fejl.push("P
 await page.goto(base + "/");
 if (!(await page.textContent("body")).includes("Søndergade 12")) fejl.push("Deal vises ikke i pipeline");
 
+// 8. Områdescreening: kør på 2200 og opret deal fra listen
+await page.goto(base + "/screening?postnr=2200", { waitUntil: "networkidle" });
+const scrTekst = await page.textContent("body");
+if (!scrTekst.includes("Prioriteret liste")) fejl.push("Screening gav ingen resultatliste");
+const opretKnapper = page.locator("table form button", { hasText: "Opret deal" });
+if ((await opretKnapper.count()) === 0) {
+  fejl.push("Ingen 'Opret deal'-knapper i screeningslisten");
+} else {
+  await opretKnapper.first().click();
+  await page.waitForURL(/\/deals\/\d+$/, { timeout: 20000 });
+  console.log("Deal oprettet fra screening:", page.url());
+  const dealTekst = await page.textContent("body");
+  if (!dealTekst.includes("Distress-score")) fejl.push("Distress-score mangler på dealside");
+}
+
+// 9. CRM: kontaktlog + investor-match (på den første deal)
+await page.goto(dealUrl, { waitUntil: "networkidle" });
+await page.fill('input[name="person"]', "Mægler Jens");
+await page.fill('textarea[name="resume"]', "Ringet - sælger vil gerne tale pris.");
+await page.click('#kontaktlog button[type="submit"]');
+await page.waitForLoadState("networkidle");
+
+await page.goto(base + "/investorer");
+await page.fill('input[name="navn"]', "Testinvestor ApS");
+await page.fill('input[name="budget"]', "10-30 mio.");
+await page.click('form button[type="submit"]');
+await page.waitForLoadState("networkidle");
+if (!(await page.textContent("body")).includes("Testinvestor ApS")) fejl.push("Investor blev ikke oprettet");
+
+await page.goto(dealUrl);
+await page.selectOption('#investorer select[name="status"]', "Kontaktet");
+await page.click('#investorer button[type="submit"]');
+await page.waitForLoadState("networkidle");
+await page.reload({ waitUntil: "networkidle" });
+const crmTekst = await page.textContent("body");
+if (!crmTekst.includes("Mægler Jens")) fejl.push("Kontaktlog-post mangler");
+if (!crmTekst.includes("Testinvestor ApS")) fejl.push("Investor-match mangler");
+
 await browser.close();
 if (fejl.length) {
   console.error("FEJL:\n" + fejl.join("\n"));

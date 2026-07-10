@@ -4,12 +4,20 @@
  */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { hentDeal, hentDokumenter } from "@/lib/db";
+import {
+  hentDeal,
+  hentDokumenter,
+  hentInvestorer,
+  hentInvestorMatches,
+  hentKontakter,
+} from "@/lib/db";
+import { beregnDistress } from "@/lib/distress";
 import { beregnNoegletal, kr, pct, tal } from "@/lib/noegletal";
 import { beregnTjekliste } from "@/lib/tjekliste";
 import { STATUS_LABELS, STATUS_RAEKKEFOELGE } from "@/lib/model";
 import { genindhentAutoAction, saetStatusAction, sletDealAction } from "@/lib/actions";
 import AutoData from "./AutoData";
+import { InvestorMatchSektion, KontaktlogSektion } from "./CrmSektioner";
 import {
   DokumentSektion,
   JuridiskSektion,
@@ -28,8 +36,12 @@ export default async function DealSide({ params }: { params: Promise<{ id: strin
   if (!deal) notFound();
 
   const dokumenter = hentDokumenter(deal.id);
+  const kontakter = hentKontakter(deal.id);
+  const investorer = hentInvestorer();
+  const matches = hentInvestorMatches(deal.id);
   const n = beregnNoegletal(deal);
   const tjekliste = beregnTjekliste(deal, dokumenter);
+  const distress = beregnDistress(deal.auto);
 
   return (
     <>
@@ -101,7 +113,32 @@ export default async function DealSide({ params }: { params: Promise<{ id: strin
           <div className="vaerdi">{n.tomgangsprocent != null ? `${n.tomgangsprocent} %` : "–"}</div>
           <div className="sub">af {deal.lejeforhold.lejemaal.length || "?"} lejemål</div>
         </div>
+        <div className="kpi">
+          <div className="label">Distress-score</div>
+          <div className={`vaerdi score-tal ${distress.niveau}`}>{distress.score}</div>
+          <div className="sub">{distress.signaler.length} signal{distress.signaler.length === 1 ? "" : "er"}</div>
+        </div>
       </div>
+
+      {distress.signaler.length > 0 && (
+        <div className="card">
+          <h2>Distress-signaler</h2>
+          <table>
+            <tbody>
+              {distress.signaler.map((s) => (
+                <tr key={s.navn}>
+                  <td style={{ width: 180 }}><strong>{s.navn}</strong></td>
+                  <td className="num" style={{ width: 90, whiteSpace: "nowrap" }}>+{s.point} / {s.maksPoint}</td>
+                  <td>{s.begrundelse}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="small muted">
+            Vægtene kan justeres i <code>src/lib/distress.ts</code> uden at ændre dataindhentningen.
+          </p>
+        </div>
+      )}
 
       {/* Flags */}
       {n.flags.length > 0 && (
@@ -166,21 +203,25 @@ export default async function DealSide({ params }: { params: Promise<{ id: strin
 
       {/* Manuelle sektioner */}
       <div className="sektionsnav ingen-print">
+        <a href="#kontaktlog">Kontaktlog</a>
         <a href="#lejeforhold">Lejeforhold</a>
         <a href="#oekonomi">Driftsøkonomi</a>
         <a href="#stand">Stand</a>
         <a href="#pris">Pris & finansiering</a>
         <a href="#juridisk">Juridisk</a>
         <a href="#dokumenter">Dokumenter</a>
+        <a href="#investorer">Investorer</a>
         <a href="#noter">Noter</a>
       </div>
 
+      <KontaktlogSektion deal={deal} kontakter={kontakter} />
       <LejeforholdSektion deal={deal} />
       <OekonomiSektion deal={deal} />
       <StandSektion deal={deal} />
       <PrisSektion deal={deal} />
       <JuridiskSektion deal={deal} />
       <DokumentSektion deal={deal} dokumenter={dokumenter} />
+      <InvestorMatchSektion deal={deal} matches={matches} investorer={investorer} />
       <NoteSektion deal={deal} />
 
       <form

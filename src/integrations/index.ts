@@ -9,25 +9,31 @@ import type {
   AutoIndhentning,
   BbrClient,
   DawaClient,
+  EjendomsSoegningClient,
   EjerClient,
   MarkedsDataClient,
   PlanDataClient,
+  StatstidendeClient,
   VurderingClient,
 } from "./types";
 import {
   MockBbrClient,
   MockDawaClient,
+  MockEjendomsSoegningClient,
   MockEjerClient,
   MockMarkedsDataClient,
   MockPlanDataClient,
+  MockStatstidendeClient,
   MockVurderingClient,
 } from "./mock/clients";
 import {
   RealBbrClient,
   RealDawaClient,
+  RealEjendomsSoegningClient,
   RealEjerClient,
   RealMarkedsDataClient,
   RealPlanDataClient,
+  RealStatstidendeClient,
   RealVurderingClient,
 } from "./real/clients";
 
@@ -52,6 +58,14 @@ export function getPlanDataClient(): PlanDataClient {
 }
 export function getMarkedsDataClient(): MarkedsDataClient {
   return erReal("MARKED") ? new RealMarkedsDataClient() : new MockMarkedsDataClient();
+}
+export function getStatstidendeClient(): StatstidendeClient {
+  return erReal("STATSTIDENDE") ? new RealStatstidendeClient() : new MockStatstidendeClient();
+}
+export function getEjendomsSoegningClient(): EjendomsSoegningClient {
+  return erReal("EJENDOMSSOEGNING")
+    ? new RealEjendomsSoegningClient()
+    : new MockEjendomsSoegningClient();
 }
 
 /**
@@ -79,5 +93,21 @@ export async function koerAutoIndhentning(adresse: AdresseMatch): Promise<AutoIn
     sikker("Markedsdata", () => getMarkedsDataClient().hentMarkedsData(adresse.postnr)),
   ]);
 
-  return { bbr, vurdering, ejer, plandata, marked, fejl, hentetTidspunkt: new Date().toISOString() };
+  // Statstidende søges på ejeren og afhænger derfor af ejer-opslaget
+  const statstidende = ejer
+    ? await sikker("Statstidende", () =>
+        getStatstidendeClient().soegMeddelelser({ navn: ejer.navn, cvrNummer: ejer.cvrNummer })
+      )
+    : null;
+
+  return {
+    bbr,
+    vurdering,
+    ejer,
+    plandata,
+    marked,
+    statstidende,
+    fejl,
+    hentetTidspunkt: new Date().toISOString(),
+  };
 }

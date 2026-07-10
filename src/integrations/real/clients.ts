@@ -23,12 +23,15 @@ import type {
   BbrClient,
   BbrData,
   DawaClient,
+  EjendomsSoegningClient,
   EjerClient,
   EjerInfo,
   MarkedsData,
   MarkedsDataClient,
   PlanData,
   PlanDataClient,
+  StatstidendeClient,
+  StatstidendeMeddelelse,
   Vurdering,
   VurderingClient,
 } from "../types";
@@ -168,5 +171,52 @@ export class RealMarkedsDataClient implements MarkedsDataClient {
     // TODO: Hent kvm-priser og handelsaktivitet for postnummeret/kommunen
     // og beregn 1- og 5-års udvikling.
     throw new IkkeImplementeret("Markedsdata", "Finans Danmark-statistikken er åben.");
+  }
+}
+
+/**
+ * Statstidende - kundgørelser af dødsboer (proklama), konkursdekreter og
+ * tvangsopløsninger. Gratis og opdateres dagligt.
+ * API: https://api.statstidende.dk (kræver gratis oprettelse/certifikat -
+ * se "Statstidende API" på statstidende.dk under "Om Statstidende").
+ *
+ * Flow: søg meddelelser på CVR-nummer (selskaber) eller navn (dødsboer)
+ * og map meddelelsestypen: "Dødsboer" -> doedsbo,
+ * "Konkursboer/dekret" -> konkurs, "Tvangsopløsning" -> tvangsoploesning.
+ */
+export class RealStatstidendeClient implements StatstidendeClient {
+  async soegMeddelelser(_params: {
+    navn?: string;
+    cvrNummer?: string | null;
+  }): Promise<StatstidendeMeddelelse[]> {
+    // TODO:
+    // 1. Kald Statstidendes søge-endpoint med CVR-nummer eller navn.
+    // 2. Filtrér på relevante meddelelsestyper og map til
+    //    StatstidendeMeddelelse (type, dato, overskrift, resume, link).
+    // 3. Overvej et dagligt cron-job der cacher meddelelser lokalt,
+    //    så screening ikke rammer API'et for hver ejendom.
+    throw new IkkeImplementeret("Statstidende", "API'et er gratis, kræver kun oprettelse.");
+  }
+}
+
+/**
+ * Ejendomssøgning til områdescreening - bygget alene på gratis kilder:
+ *  1. DAWA: alle adgangsadresser i et postnr:
+ *     https://api.dataforsyningen.dk/adgangsadresser?postnr=2200&struktur=nestet
+ *     (åbent, ingen nøgle; brug per_side + side til paginering)
+ *  2. BBR (Datafordeler): filtrér på anvendelseskode 140/150 og
+ *     antal enheder inden for kriterierne.
+ *
+ * VIGTIGT ved rigtig drift: et postnr har tusindvis af adresser, så
+ * BBR-opslagene bør køres som batch-job med lokal caching (tabellen kan
+ * genopfriskes fx ugentligt) i stedet for live pr. screening. Det holder
+ * antallet af API-kald nede og gør screeningen hurtig og stabil.
+ */
+export class RealEjendomsSoegningClient implements EjendomsSoegningClient {
+  async findAdresser(_postnr: string): Promise<AdresseMatch[]> {
+    // TODO: Hent adgangsadresser fra DAWA (paginér), dedupliker pr.
+    // opgang/ejendom (samme jordstykke) og returnér AdresseMatch-listen.
+    // BBR-filtreringen sker i screening-laget via BbrClient.
+    throw new IkkeImplementeret("Ejendomssøgning", "Bygger på åbne DAWA + BBR.");
   }
 }

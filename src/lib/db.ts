@@ -11,7 +11,10 @@ import {
   Deal,
   DealStatus,
   Dokument,
+  Investor,
+  InvestorMatch,
   Juridisk,
+  Kontakt,
   Lejeforhold,
   Oekonomi,
   PrisFinansiering,
@@ -56,6 +59,35 @@ function db(): Database.Database {
       filnavn TEXT NOT NULL,
       sti TEXT NOT NULL,
       uploadet TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS kontakter (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      dato TEXT NOT NULL,
+      kanal TEXT NOT NULL,
+      person TEXT NOT NULL DEFAULT '',
+      resume TEXT NOT NULL DEFAULT '',
+      naeste_skridt TEXT NOT NULL DEFAULT '',
+      naeste_skridt_dato TEXT
+    );
+    CREATE TABLE IF NOT EXISTS investorer (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      navn TEXT NOT NULL,
+      selskab TEXT NOT NULL DEFAULT '',
+      kontaktinfo TEXT NOT NULL DEFAULT '',
+      fokus TEXT NOT NULL DEFAULT '',
+      budget TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      oprettet TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS investor_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      investor_id INTEGER NOT NULL REFERENCES investorer(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'Foreslået',
+      note TEXT NOT NULL DEFAULT '',
+      opdateret TEXT NOT NULL,
+      UNIQUE(deal_id, investor_id)
     );
   `);
   return _db;
@@ -164,4 +196,89 @@ export function hentDokumenter(dealId: number): Dokument[] {
 
 export function sletDokument(id: number) {
   db().prepare("DELETE FROM dokumenter WHERE id = ?").run(id);
+}
+
+/* ---------- CRM: kontaktlog ---------- */
+
+export function tilfoejKontakt(k: Omit<Kontakt, "id">): number {
+  const res = db()
+    .prepare(
+      `INSERT INTO kontakter (deal_id, dato, kanal, person, resume, naeste_skridt, naeste_skridt_dato)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(k.dealId, k.dato, k.kanal, k.person, k.resume, k.naesteSkridt, k.naesteSkridtDato);
+  return Number(res.lastInsertRowid);
+}
+
+export function hentKontakter(dealId: number): Kontakt[] {
+  return db()
+    .prepare(
+      `SELECT id, deal_id as dealId, dato, kanal, person, resume,
+              naeste_skridt as naesteSkridt, naeste_skridt_dato as naesteSkridtDato
+       FROM kontakter WHERE deal_id = ? ORDER BY dato DESC, id DESC`
+    )
+    .all(dealId) as Kontakt[];
+}
+
+export function sletKontakt(id: number) {
+  db().prepare("DELETE FROM kontakter WHERE id = ?").run(id);
+}
+
+/* ---------- CRM: investorer ---------- */
+
+export function opretInvestor(i: Omit<Investor, "id" | "oprettet">): number {
+  const res = db()
+    .prepare(
+      `INSERT INTO investorer (navn, selskab, kontaktinfo, fokus, budget, note, oprettet)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(i.navn, i.selskab, i.kontaktinfo, i.fokus, i.budget, i.note, new Date().toISOString());
+  return Number(res.lastInsertRowid);
+}
+
+export function hentInvestorer(): Investor[] {
+  return db()
+    .prepare("SELECT * FROM investorer ORDER BY navn COLLATE NOCASE")
+    .all() as Investor[];
+}
+
+export function sletInvestor(id: number) {
+  db().prepare("DELETE FROM investor_matches WHERE investor_id = ?").run(id);
+  db().prepare("DELETE FROM investorer WHERE id = ?").run(id);
+}
+
+/* ---------- CRM: investor-matches pr. deal ---------- */
+
+export function gemInvestorMatch(dealId: number, investorId: number, status: string, note: string) {
+  db()
+    .prepare(
+      `INSERT INTO investor_matches (deal_id, investor_id, status, note, opdateret)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(deal_id, investor_id)
+       DO UPDATE SET status = excluded.status, note = excluded.note, opdateret = excluded.opdateret`
+    )
+    .run(dealId, investorId, status, note, new Date().toISOString());
+}
+
+export function hentInvestorMatches(dealId: number): InvestorMatch[] {
+  return db()
+    .prepare(
+      `SELECT m.id, m.deal_id as dealId, m.investor_id as investorId,
+              i.navn as investorNavn, m.status, m.note, m.opdateret
+       FROM investor_matches m JOIN investorer i ON i.id = m.investor_id
+       WHERE m.deal_id = ? ORDER BY m.opdateret DESC`
+    )
+    .all(dealId) as InvestorMatch[];
+}
+
+export function sletInvestorMatch(id: number) {
+  db().prepare("DELETE FROM investor_matches WHERE id = ?").run(id);
+}
+
+/** Antal aktive matches pr. investor - bruges på investoroversigten */
+export function antalMatchesPrInvestor(): Map<number, number> {
+  const rows = db()
+    .prepare("SELECT investor_id as id, COUNT(*) as antal FROM investor_matches GROUP BY investor_id")
+    .all() as { id: number; antal: number }[];
+  return new Map(rows.map((r) => [r.id, r.antal]));
 }

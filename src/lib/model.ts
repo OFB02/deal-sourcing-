@@ -5,21 +5,32 @@
  */
 import type { AdresseMatch, AutoIndhentning } from "@/integrations/types";
 
-export type DealStatus = "screening" | "shortlist" | "indhentning" | "klar" | "afvist";
+export type DealStatus =
+  | "screening"
+  | "shortlist"
+  | "dialog"
+  | "indhentning"
+  | "klar"
+  | "lukket"
+  | "afvist";
 
 export const STATUS_LABELS: Record<DealStatus, string> = {
   screening: "Screening",
   shortlist: "Shortlist",
+  dialog: "Dialog med sælger",
   indhentning: "Manuel indhentning",
   klar: "Klar til sourcing",
+  lukket: "Lukket",
   afvist: "Afvist",
 };
 
 export const STATUS_RAEKKEFOELGE: DealStatus[] = [
   "screening",
   "shortlist",
+  "dialog",
   "indhentning",
   "klar",
+  "lukket",
   "afvist",
 ];
 
@@ -120,6 +131,44 @@ export interface Dokument {
   filnavn: string;
   sti: string;
   uploadet: string;
+}
+
+/* ---------- CRM: kontaktlog og investorer ---------- */
+
+export const KONTAKT_KANALER = ["Telefon", "E-mail", "Brev", "Møde", "Besigtigelse", "Andet"] as const;
+
+export interface Kontakt {
+  id: number;
+  dealId: number;
+  dato: string; // ISO-dato
+  kanal: string;
+  person: string; // hvem talte du med (sælger, mægler, kurator...)
+  resume: string;
+  naesteSkridt: string;
+  naesteSkridtDato: string | null;
+}
+
+export const INVESTOR_MATCH_STATUSSER = ["Foreslået", "Kontaktet", "Interesseret", "Afvist"] as const;
+
+export interface Investor {
+  id: number;
+  navn: string;
+  selskab: string;
+  kontaktinfo: string; // e-mail/telefon
+  fokus: string; // område/ejendomstype
+  budget: string; // fritekst, fx "10-30 mio."
+  note: string;
+  oprettet: string;
+}
+
+export interface InvestorMatch {
+  id: number;
+  dealId: number;
+  investorId: number;
+  investorNavn: string;
+  status: string;
+  note: string;
+  opdateret: string;
 }
 
 /* ---------- Den samlede deal ---------- */

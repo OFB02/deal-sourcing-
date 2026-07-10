@@ -17,6 +17,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Deal<span>Sourcing</span>
           </Link>
           <Link href="/">Pipeline</Link>
+          <Link href="/screening">Screening</Link>
+          <Link href="/investorer">Investorer</Link>
           <Link href="/datakilder">Datakilder</Link>
           <Link href="/deals/new" className="ny-deal">
             + Ny deal

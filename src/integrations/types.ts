@@ -65,16 +65,27 @@ export interface EjerInfo {
   ejertype: "privatperson" | "selskab" | "doedsbo" | "offentlig" | "ukendt";
   navn: string;
   cvrNummer: string | null;
+  /** Årstal ejeren overtog ejendommen (Ejerfortegnelsen). Lang ejertid
+   *  = ofte lav bogført værdi og potentiel salgsvilje. */
+  overtagelsesAar: number | null;
   /** Kun udfyldt for selskaber */
   selskab: CvrSelskab | null;
 }
+
+export type CvrStatus =
+  | "Normal"
+  | "Under tvangsopløsning"
+  | "Under konkurs"
+  | "Under likvidation"
+  | "Opløst";
 
 export interface CvrSelskab {
   cvrNummer: string;
   navn: string;
   virksomhedsform: string;
   stiftelsesdato: string;
-  status: string;
+  /** Distress-signal: tvangsopløsning/konkurs vægter tungt i scoringen */
+  status: CvrStatus;
   branche: string;
   /** Nøgletal fra seneste offentliggjorte årsregnskaber */
   regnskaber: {
@@ -83,6 +94,15 @@ export interface CvrSelskab {
     egenkapital: number | null;
   }[];
   reelleEjere: string[];
+}
+
+/** Meddelelse fra Statstidende (gratis, opdateres dagligt) */
+export interface StatstidendeMeddelelse {
+  type: "doedsbo" | "konkurs" | "tvangsoploesning" | "likvidation" | "andet";
+  dato: string; // ISO
+  overskrift: string;
+  resume: string;
+  link: string | null;
 }
 
 /** Plangrundlag for området (Plandata.dk) */
@@ -143,6 +163,34 @@ export interface MarkedsDataClient {
   hentMarkedsData(postnr: string): Promise<MarkedsData>;
 }
 
+export interface StatstidendeClient {
+  /**
+   * Søger meddelelser (dødsboer, konkursdekreter, tvangsopløsninger)
+   * der matcher ejendommens ejer. Søg på CVR-nummer når det findes,
+   * ellers på navn.
+   */
+  soegMeddelelser(params: {
+    navn?: string;
+    cvrNummer?: string | null;
+  }): Promise<StatstidendeMeddelelse[]>;
+}
+
+/** Kriterier for områdescreening */
+export interface ScreeningKriterier {
+  postnr: string;
+  minLejemaal: number; // typisk 4
+  maksLejemaal: number; // typisk 15
+}
+
+export interface EjendomsSoegningClient {
+  /**
+   * Finder kandidat-adresser i et område (postnr). Den rigtige
+   * implementering henter alle adgangsadresser fra DAWA og filtrerer
+   * efterfølgende på BBR-data (anvendelse + antal enheder).
+   */
+  findAdresser(postnr: string): Promise<AdresseMatch[]>;
+}
+
 /** Samlet resultat af en automatisk indhentning for en ejendom */
 export interface AutoIndhentning {
   bbr: BbrData | null;
@@ -150,6 +198,8 @@ export interface AutoIndhentning {
   ejer: EjerInfo | null;
   plandata: PlanData | null;
   marked: MarkedsData | null;
+  /** Statstidende-meddelelser knyttet til ejeren (kan mangle på ældre indhentninger) */
+  statstidende?: StatstidendeMeddelelse[] | null;
   /** Kilder der fejlede, med fejlbesked - vises i UI */
   fejl: { kilde: string; besked: string }[];
   hentetTidspunkt: string;

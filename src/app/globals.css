@@ -89,9 +89,30 @@ h3 { font-size: 15px; margin: 0 0 8px; }
 }
 .badge.screening { background: var(--info-bg); color: #3d4a61; }
 .badge.shortlist { background: #e8effa; color: var(--accent); }
+.badge.dialog { background: #eae4f6; color: #5b3fa8; }
 .badge.indhentning { background: var(--advarsel-bg); color: var(--advarsel); }
 .badge.klar { background: var(--positiv-bg); color: var(--positiv); }
+.badge.lukket { background: #16233a; color: #fff; }
 .badge.afvist { background: #f3e5e4; color: var(--danger); }
+
+/* Distress-score */
+.score-tal { font-weight: 700; font-variant-numeric: tabular-nums; }
+.score-tal.hoej { color: var(--danger); }
+.score-tal.mellem { color: var(--advarsel); }
+.score-tal.lav { color: var(--muted); }
+
+.signal-chip {
+  display: inline-block;
+  background: var(--advarsel-bg);
+  color: var(--advarsel);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 1px 4px 1px 0;
+  cursor: help;
+  white-space: nowrap;
+}
 
 /* Flags */
 .flag {

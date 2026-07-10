@@ -9,16 +9,29 @@ import type {
   BbrClient,
   BbrData,
   DawaClient,
+  EjendomsSoegningClient,
   EjerClient,
   EjerInfo,
   MarkedsData,
   MarkedsDataClient,
   PlanData,
   PlanDataClient,
+  StatstidendeClient,
+  StatstidendeMeddelelse,
   Vurdering,
   VurderingClient,
 } from "../types";
-import { MOCK_ADRESSER, EJERLAV, basisKvmPris, hash, pick, seeded } from "./data";
+import {
+  MOCK_ADRESSER,
+  EJERLAV,
+  SCREENING_GADER,
+  basisKvmPris,
+  hash,
+  mockCvrStatus,
+  mockEjerProfil,
+  pick,
+  seeded,
+} from "./data";
 
 function tilAdresseMatch(a: (typeof MOCK_ADRESSER)[number]): AdresseMatch {
   const seed = `${a.vejnavn} ${a.husnr}, ${a.postnr}`;
@@ -143,19 +156,17 @@ export class MockVurderingClient implements VurderingClient {
 export class MockEjerClient implements EjerClient {
   async hentEjerInfo(adresse: AdresseMatch): Promise<EjerInfo> {
     const s = adresse.betegnelse;
-    const type = pick(s, "ejertype", [
-      "selskab",
-      "selskab",
-      "privatperson",
-      "privatperson",
-      "doedsbo",
-    ] as const);
+    const profil = mockEjerProfil(s);
 
-    if (type !== "selskab") {
+    if (profil.ejertype !== "selskab") {
       return {
-        ejertype: type,
-        navn: type === "doedsbo" ? "Boet efter " + pick(s, "navn", ["K. Hansen", "E. Jørgensen", "B. Nielsen"]) : pick(s, "navn", ["Karsten Hansen", "Eva Jørgensen", "Bent Nielsen", "Ulla Madsen"]),
+        ejertype: profil.ejertype,
+        navn:
+          profil.ejertype === "doedsbo"
+            ? "Boet efter " + pick(s, "navn", ["K. Hansen", "E. Jørgensen", "B. Nielsen"])
+            : pick(s, "navn", ["Karsten Hansen", "Eva Jørgensen", "Bent Nielsen", "Ulla Madsen"]),
         cvrNummer: null,
+        overtagelsesAar: profil.overtagelsesAar,
         selskab: null,
       };
     }
@@ -168,26 +179,110 @@ export class MockEjerClient implements EjerClient {
       "Provinsens Ejendomme A/S",
       "Vestergade Holding ApS",
     ]);
+    const status = mockCvrStatus(cvr);
     const resultatBasis = seeded(s, "resultat", -400, 2500) * 1000;
+    // Normalt selskab har regnskab for sidste år; "glemte" selskaber hænger 3 år bagud
+    const iAar = new Date().getFullYear();
+    const senesteAar = profil.manglerRegnskab ? iAar - 3 : iAar - 1;
     return {
       ejertype: "selskab",
       navn,
       cvrNummer: cvr,
+      overtagelsesAar: profil.overtagelsesAar,
       selskab: {
         cvrNummer: cvr,
         navn,
         virksomhedsform: navn.includes("A/S") ? "Aktieselskab" : "Anpartsselskab",
         stiftelsesdato: `${seeded(s, "stiftaar", 1988, 2018)}-0${seeded(s, "stiftmdr", 1, 9)}-15`,
-        status: "Normal",
+        status,
         branche: "682040 Udlejning af erhvervsejendomme",
         regnskaber: [
-          { aar: 2024, resultat: resultatBasis, egenkapital: resultatBasis * 6 },
-          { aar: 2023, resultat: Math.round(resultatBasis * 0.85), egenkapital: resultatBasis * 5 },
-          { aar: 2022, resultat: Math.round(resultatBasis * 0.7), egenkapital: Math.round(resultatBasis * 4.2) },
+          { aar: senesteAar, resultat: resultatBasis, egenkapital: resultatBasis * 6 },
+          { aar: senesteAar - 1, resultat: Math.round(resultatBasis * 0.85), egenkapital: resultatBasis * 5 },
+          { aar: senesteAar - 2, resultat: Math.round(resultatBasis * 0.7), egenkapital: Math.round(resultatBasis * 4.2) },
         ],
         reelleEjere: [pick(s, "reelejer", ["Michael Larsen", "Søren Vestergaard", "Anne Holm", "Peter Krogh"])],
       },
     };
+  }
+}
+
+export class MockStatstidendeClient implements StatstidendeClient {
+  async soegMeddelelser(params: {
+    navn?: string;
+    cvrNummer?: string | null;
+  }): Promise<StatstidendeMeddelelse[]> {
+    const meddelelser: StatstidendeMeddelelse[] = [];
+
+    // Dødsboer kundgøres i Statstidende med proklama
+    if (params.navn?.startsWith("Boet efter ")) {
+      const afdoede = params.navn.replace("Boet efter ", "");
+      meddelelser.push({
+        type: "doedsbo",
+        dato: `2026-0${seeded(params.navn, "dbmdr", 1, 6)}-12`,
+        overskrift: `Proklama - boet efter ${afdoede}`,
+        resume: `Skifteretten har udstedt proklama i boet efter ${afdoede}. Krav skal anmeldes inden 8 uger.`,
+        link: "https://statstidende.dk (mock)",
+      });
+    }
+
+    // Konkursdekreter og tvangsopløsninger kundgøres ligeledes
+    if (params.cvrNummer) {
+      const status = mockCvrStatus(params.cvrNummer);
+      if (status === "Under konkurs") {
+        meddelelser.push({
+          type: "konkurs",
+          dato: `2026-0${seeded(params.cvrNummer, "kkmdr", 1, 6)}-03`,
+          overskrift: `Konkursdekret - CVR ${params.cvrNummer}`,
+          resume: "Skifteretten har afsagt konkursdekret. Kurator er udpeget; aktiver realiseres.",
+          link: "https://statstidende.dk (mock)",
+        });
+      } else if (status === "Under tvangsopløsning") {
+        meddelelser.push({
+          type: "tvangsoploesning",
+          dato: `2026-0${seeded(params.cvrNummer, "tomdr", 1, 6)}-19`,
+          overskrift: `Tvangsopløsning - CVR ${params.cvrNummer}`,
+          resume: "Erhvervsstyrelsen har anmodet skifteretten om at opløse selskabet (typisk pga. manglende årsrapport).",
+          link: "https://statstidende.dk (mock)",
+        });
+      }
+    }
+
+    return meddelelser;
+  }
+}
+
+export class MockEjendomsSoegningClient implements EjendomsSoegningClient {
+  async findAdresser(postnr: string): Promise<AdresseMatch[]> {
+    const gader = SCREENING_GADER[postnr] ?? ["Hovedgaden", "Stationsvej", "Kirkegade"];
+    const postnrnavn =
+      MOCK_ADRESSER.find((a) => a.postnr === postnr)?.postnrnavn ?? "Danmark";
+    const kommunekode =
+      MOCK_ADRESSER.find((a) => a.postnr === postnr)?.kommunekode ?? "0999";
+
+    const adresser: AdresseMatch[] = [];
+    for (const gade of gader) {
+      const antal = seeded("scr-" + postnr + gade, "antal", 3, 6);
+      for (let i = 0; i < antal; i++) {
+        const husnr = String(seeded("scr-" + gade, `husnr${i}`, 2, 180));
+        const seed = `${gade} ${husnr}, ${postnr}`;
+        adresser.push({
+          id: `mock-${hash(seed).toString(16)}`,
+          betegnelse: `${gade} ${husnr}, ${postnr} ${postnrnavn}`,
+          vejnavn: gade,
+          husnr,
+          postnr,
+          postnrnavn,
+          kommunekode,
+          matrikelnr: `${seeded(seed, "matr", 100, 4999)}${pick(seed, "litra", ["a", "b", "c", "d", "e", ""])}`,
+          ejerlav: pick(seed, "ejerlav", EJERLAV),
+          bfeNummer: String(seeded(seed, "bfe", 1000000, 9999999)),
+        });
+      }
+    }
+    // Dedupliker (samme gade+husnr kan forekomme)
+    const set = new Map(adresser.map((a) => [a.betegnelse, a]));
+    return [...set.values()];
   }
 }
 

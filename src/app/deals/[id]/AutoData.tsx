@@ -5,8 +5,17 @@
 import type { AutoIndhentning } from "@/integrations/types";
 import { kr, pct, tal } from "@/lib/noegletal";
 
+const STATSTIDENDE_LABELS: Record<string, string> = {
+  doedsbo: "Dødsbo",
+  konkurs: "Konkurs",
+  tvangsoploesning: "Tvangsopløsning",
+  likvidation: "Likvidation",
+  andet: "Andet",
+};
+
 export default function AutoData({ auto }: { auto: AutoIndhentning }) {
   const { bbr, vurdering, ejer, plandata, marked } = auto;
+  const statstidende = auto.statstidende ?? [];
   return (
     <>
       {auto.fejl.length > 0 && (
@@ -84,16 +93,53 @@ export default function AutoData({ auto }: { auto: AutoIndhentning }) {
                 <tbody>
                   <tr><td className="muted">Ejer</td><td>{ejer.navn}</td></tr>
                   <tr><td className="muted">Type</td><td>{ejer.ejertype}</td></tr>
+                  {ejer.overtagelsesAar && (
+                    <tr>
+                      <td className="muted">Ejet siden</td>
+                      <td>{ejer.overtagelsesAar} ({new Date().getFullYear() - ejer.overtagelsesAar} år)</td>
+                    </tr>
+                  )}
                   {ejer.cvrNummer && <tr><td className="muted">CVR</td><td>{ejer.cvrNummer}</td></tr>}
                   {ejer.selskab && (
                     <>
-                      <tr><td className="muted">Form / status</td><td>{ejer.selskab.virksomhedsform} · {ejer.selskab.status}</td></tr>
+                      <tr>
+                        <td className="muted">Form / status</td>
+                        <td>
+                          {ejer.selskab.virksomhedsform} ·{" "}
+                          {ejer.selskab.status === "Normal" ? (
+                            ejer.selskab.status
+                          ) : (
+                            <span className="badge afvist">{ejer.selskab.status}</span>
+                          )}
+                        </td>
+                      </tr>
                       <tr><td className="muted">Branche</td><td className="small">{ejer.selskab.branche}</td></tr>
                       <tr><td className="muted">Reelle ejere</td><td>{ejer.selskab.reelleEjere.join(", ")}</td></tr>
                     </>
                   )}
                 </tbody>
               </table>
+
+              <h3 style={{ marginTop: 12 }}>Statstidende</h3>
+              {statstidende.length === 0 ? (
+                <p className="muted small">Ingen meddelelser fundet for ejeren.</p>
+              ) : (
+                <table>
+                  <tbody>
+                    {statstidende.map((m, i) => (
+                      <tr key={i}>
+                        <td>
+                          <span className="badge afvist">{STATSTIDENDE_LABELS[m.type] ?? m.type}</span>
+                        </td>
+                        <td>
+                          <strong>{m.overskrift}</strong>
+                          <div className="small muted">{m.dato} · {m.resume}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
               {ejer.selskab && (
                 <>
                   <h3 style={{ marginTop: 12 }}>Seneste årsregnskaber (CVR)</h3>

@@ -47,6 +47,20 @@ const KILDER = [
     kraever: "Ingen nøgle. Bemærk: Boliga/DinGeo har ikke åbne API'er til kommerciel brug.",
     fil: "src/integrations/real/clients.ts → RealMarkedsDataClient",
   },
+  {
+    env: "DATASOURCE_STATSTIDENDE",
+    navn: "Statstidende - dødsboer, konkurser, tvangsopløsninger",
+    leverandoer: "Statstidende (gratis, opdateres dagligt)",
+    kraever: "Gratis API-oprettelse på statstidende.dk. Kernesignal i distress-scoringen.",
+    fil: "src/integrations/real/clients.ts → RealStatstidendeClient",
+  },
+  {
+    env: "DATASOURCE_EJENDOMSSOEGNING",
+    navn: "Ejendomssøgning - adresser til områdescreening",
+    leverandoer: "DAWA (åben) + BBR-filtrering",
+    kraever: "Ingen nøgle til DAWA. Kør som batch-job med lokal cache ved rigtig drift.",
+    fil: "src/integrations/real/clients.ts → RealEjendomsSoegningClient",
+  },
 ];
 
 const MANUELLE = [
@@ -64,6 +78,8 @@ export default function Datakilder() {
       <p className="muted">
         Hver kilde kan omstilles mellem <strong>mock</strong> (testdata) og{" "}
         <strong>rigtig API</strong> via miljøvariabler - se <code>.env.example</code>.
+        Platformen bruger <strong>kun gratis, offentlige kilder</strong>: ingen scraping,
+        ingen AI-kald og ingen betalte opslag i den automatiske del.
       </p>
 
       <div className="card">

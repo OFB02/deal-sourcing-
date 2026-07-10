@@ -288,3 +288,60 @@ export async function sletDokumentAction(formData: FormData) {
   db.sletDokument(dokId);
   revalidatePath(`/deals/${dealId}`);
 }
+
+/* ---------- CRM: kontaktlog ---------- */
+
+export async function tilfoejKontaktAction(formData: FormData) {
+  const dealId = Number(formData.get("dealId"));
+  db.tilfoejKontakt({
+    dealId,
+    dato: txt(formData, "dato") || new Date().toISOString().slice(0, 10),
+    kanal: txt(formData, "kanal") || "Andet",
+    person: txt(formData, "person"),
+    resume: txt(formData, "resume"),
+    naesteSkridt: txt(formData, "naesteSkridt"),
+    naesteSkridtDato: txt(formData, "naesteSkridtDato") || null,
+  });
+  revalidatePath(`/deals/${dealId}`);
+}
+
+export async function sletKontaktAction(formData: FormData) {
+  const dealId = Number(formData.get("dealId"));
+  db.sletKontakt(Number(formData.get("kontaktId")));
+  revalidatePath(`/deals/${dealId}`);
+}
+
+/* ---------- CRM: investorer ---------- */
+
+export async function opretInvestorAction(formData: FormData) {
+  const navn = txt(formData, "navn");
+  if (!navn) return;
+  db.opretInvestor({
+    navn,
+    selskab: txt(formData, "selskab"),
+    kontaktinfo: txt(formData, "kontaktinfo"),
+    fokus: txt(formData, "fokus"),
+    budget: txt(formData, "budget"),
+    note: txt(formData, "note"),
+  });
+  revalidatePath("/investorer");
+}
+
+export async function sletInvestorAction(formData: FormData) {
+  db.sletInvestor(Number(formData.get("investorId")));
+  revalidatePath("/investorer");
+}
+
+export async function gemInvestorMatchAction(formData: FormData) {
+  const dealId = Number(formData.get("dealId"));
+  const investorId = Number(formData.get("investorId"));
+  if (!dealId || !investorId) return;
+  db.gemInvestorMatch(dealId, investorId, txt(formData, "status") || "Foreslået", txt(formData, "note"));
+  revalidatePath(`/deals/${dealId}`);
+}
+
+export async function sletInvestorMatchAction(formData: FormData) {
+  const dealId = Number(formData.get("dealId"));
+  db.sletInvestorMatch(Number(formData.get("matchId")));
+  revalidatePath(`/deals/${dealId}`);
+}
