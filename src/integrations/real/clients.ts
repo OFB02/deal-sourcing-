@@ -48,37 +48,53 @@ class IkkeImplementeret extends Error {
 /**
  * DAWA - Danmarks Adressers Web API. Åben og gratis, ingen nøgle.
  * Docs: https://dawadocs.dataforsyningen.dk
+ *
+ * Live-verificeret:
+ *  - autocomplete matcher IKKE på kommaer, så de strippes fra søgningen
+ *  - matrikelnr/ejerlav ligger på det nestede adgangsadresse-svar
+ *  - BFE-nummer hentes fra /jordstykker/{ejerlavkode}/{matrikelnr}
  */
 export class RealDawaClient implements DawaClient {
   private base = "https://api.dataforsyningen.dk";
 
   async soegAdresse(query: string): Promise<AdresseMatch[]> {
-    // Autocomplete på adgangsadresser:
-    const res = await fetch(
-      `${this.base}/adgangsadresser/autocomplete?q=${encodeURIComponent(query)}&per_side=10`
-    );
+    // Autocomplete matcher hverken kommaer eller postnr i selve q -
+    // postnr udskilles til sin egen parameter
+    let q = query.replace(/,/g, " ").replace(/\s+/g, " ").trim();
+    const postnrMatch = q.match(/\b(\d{4})\b\s*$/);
+    const params = new URLSearchParams({ per_side: "8" });
+    if (postnrMatch) {
+      params.set("postnr", postnrMatch[1]);
+      q = q.slice(0, postnrMatch.index).trim();
+    }
+    params.set("q", q);
+    const res = await fetch(`${this.base}/adgangsadresser/autocomplete?${params}`);
     if (!res.ok) throw new Error(`DAWA-fejl: HTTP ${res.status}`);
     const data: any[] = await res.json();
-    return Promise.all(
-      data.map(async (d) => this.mapAdgangsadresse(await this.hentRaa(d.adgangsadresse.id)))
+    const resultater = await Promise.all(
+      data.map((d) => this.hentAdresse(d.adgangsadresse.id))
     );
+    return resultater.filter((r): r is AdresseMatch => r !== null);
   }
 
   async hentAdresse(id: string): Promise<AdresseMatch | null> {
-    try {
-      return this.mapAdgangsadresse(await this.hentRaa(id));
-    } catch {
-      return null;
-    }
-  }
-
-  private async hentRaa(id: string): Promise<any> {
     const res = await fetch(`${this.base}/adgangsadresser/${id}?struktur=nestet`);
-    if (!res.ok) throw new Error(`DAWA-fejl: HTTP ${res.status}`);
-    return res.json();
-  }
+    if (!res.ok) return null;
+    const a = await res.json();
 
-  private mapAdgangsadresse(a: any): AdresseMatch {
+    // BFE-nummeret ligger på jordstykket, ikke på adressen
+    let bfeNummer = "";
+    const ejerlavkode = a.ejerlav?.kode ?? a.jordstykke?.ejerlav?.kode;
+    const matrikelnr = a.matrikelnr ?? a.jordstykke?.matrikelnr;
+    if (ejerlavkode && matrikelnr) {
+      try {
+        const js = await fetch(`${this.base}/jordstykker/${ejerlavkode}/${encodeURIComponent(matrikelnr)}`);
+        if (js.ok) bfeNummer = String((await js.json()).bfenummer ?? "");
+      } catch {
+        // BFE er rart at have, men må ikke vælte adresseopslaget
+      }
+    }
+
     return {
       id: a.id,
       betegnelse: `${a.vejstykke.navn} ${a.husnr}, ${a.postnummer.nr} ${a.postnummer.navn}`,
@@ -87,10 +103,9 @@ export class RealDawaClient implements DawaClient {
       postnr: a.postnummer.nr,
       postnrnavn: a.postnummer.navn,
       kommunekode: a.kommune.kode,
-      matrikelnr: a.matrikelnr ?? "",
-      ejerlav: a.ejerlav?.navn ?? "",
-      // BFE-nummer kan slås op via jordstykke/BBR - udfyldes ved BBR-opslaget
-      bfeNummer: a.esrejendomsnr ?? "",
+      matrikelnr: matrikelnr ?? "",
+      ejerlav: a.ejerlav?.navn ?? a.jordstykke?.ejerlav?.navn ?? "",
+      bfeNummer,
     };
   }
 }

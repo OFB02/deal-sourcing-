@@ -83,7 +83,7 @@ resten af appen kender ikke databasen.
 
 | Miljøvariabel | Kilde | Adgang |
 |---|---|---|
-| `DATASOURCE_DAWA` | Adresser/matrikel (Dataforsyningen) | Åben - **klienten er allerede implementeret** |
+| `DATASOURCE_DAWA` | Adresser/matrikel (Dataforsyningen) | Åben - **implementeret og live-testet** (inkl. BFE-opslag via jordstykke) |
 | `DATASOURCE_BBR` | BBR via Datafordeler.dk | Gratis tjenestebruger |
 | `DATASOURCE_VURDERING` | Ejendomsvurdering via Datafordeler | Samme tjenestebruger |
 | `DATASOURCE_CVR` | Ejerfortegnelsen + CVR (Virk) | Gratis system-til-system-aftale |
