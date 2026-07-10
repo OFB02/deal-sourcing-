@@ -1,0 +1,244 @@
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border: #e2e5ea;
+  --text: #1a2233;
+  --muted: #66707f;
+  --accent: #1f4e8c;
+  --accent-light: #e8effa;
+  --positiv: #1e7a46;
+  --positiv-bg: #e4f4ea;
+  --advarsel: #b3540e;
+  --advarsel-bg: #fdeede;
+  --info-bg: #eef1f6;
+  --danger: #b3261e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.topbar {
+  background: #16233a;
+  color: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 56px;
+}
+.topbar .brand { font-weight: 700; font-size: 17px; color: #fff; }
+.topbar .brand span { color: #8fb4e8; }
+.topbar a { color: #c9d6ea; }
+.topbar .ny-deal {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.topbar .ny-deal:hover { background: #2a62ab; text-decoration: none; }
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 0 0 12px; }
+h3 { font-size: 15px; margin: 0 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 900px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+}
+
+/* Statusbadges */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge.screening { background: var(--info-bg); color: #3d4a61; }
+.badge.shortlist { background: #e8effa; color: var(--accent); }
+.badge.indhentning { background: var(--advarsel-bg); color: var(--advarsel); }
+.badge.klar { background: var(--positiv-bg); color: var(--positiv); }
+.badge.afvist { background: #f3e5e4; color: var(--danger); }
+
+/* Flags */
+.flag {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  margin-bottom: 6px;
+}
+.flag.positiv { background: var(--positiv-bg); color: var(--positiv); }
+.flag.advarsel { background: var(--advarsel-bg); color: var(--advarsel); }
+.flag.info { background: var(--info-bg); color: #3d4a61; }
+
+/* Tabeller */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th {
+  text-align: left;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border);
+}
+td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.klikbar:hover { background: #f8f9fb; cursor: pointer; }
+
+/* Nøgletal */
+.kpi-raekke { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.kpi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.kpi .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.kpi .vaerdi { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kpi .sub { font-size: 12.5px; color: var(--muted); }
+
+/* Formularer */
+label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 3px; }
+input[type="text"], input[type="number"], input[type="date"], select, textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+textarea { min-height: 70px; resize: vertical; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent-light);
+  border-color: var(--accent);
+}
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; margin: 8px 0; }
+.check input { width: auto; }
+
+button, .btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover, .btn:hover { background: #2a62ab; }
+button.sekundaer {
+  background: #fff;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+button.sekundaer:hover { background: var(--accent-light); }
+button.fare { background: #fff; color: var(--danger); border: 1px solid var(--border); padding: 4px 10px; font-size: 13px; }
+button.fare:hover { background: #fbeceb; }
+button.lille { padding: 4px 10px; font-size: 13px; }
+
+.form-raekke { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 14px; }
+
+/* Fremdriftsbjælke */
+.fremdrift { background: var(--info-bg); border-radius: 999px; height: 10px; overflow: hidden; }
+.fremdrift > div { background: var(--positiv); height: 100%; border-radius: 999px; transition: width 0.3s; }
+.fremdrift.delvis > div { background: var(--advarsel); }
+
+/* Tjekliste */
+.tjek { list-style: none; padding: 0; margin: 0; }
+.tjek li { display: flex; gap: 8px; padding: 4px 0; font-size: 14px; align-items: baseline; }
+.tjek .ok { color: var(--positiv); font-weight: 700; }
+.tjek .mangler { color: var(--muted); font-weight: 700; }
+.tjek .kilde { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: auto; white-space: nowrap; }
+
+/* Adressesøgning */
+.adresse-resultater { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.adresse-resultat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: #fff;
+}
+
+/* Sektionsnavigation på dealsiden */
+.sektionsnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.sektionsnav a {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.sektionsnav a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+details.sektion { margin-bottom: 12px; }
+details.sektion summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+  list-style: none;
+}
+details.sektion summary::before { content: "▸ "; color: var(--muted); }
+details.sektion[open] summary::before { content: "▾ "; }
+
+.fejlboks {
+  background: var(--advarsel-bg);
+  color: var(--advarsel);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  margin-bottom: 12px;
+}
+
+/* Print (deal-præsentation) */
+@media print {
+  .topbar, .ingen-print { display: none !important; }
+  body { background: #fff; }
+  .card { border: none; padding: 12px 0; break-inside: avoid; }
+  main { padding: 0; }
+}
