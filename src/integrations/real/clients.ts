@@ -98,20 +98,167 @@ export class RealDawaClient implements DawaClient {
 /**
  * BBR via Datafordeler.dk (REST-tjenesten "BBR Publik").
  * Kræver tjenestebruger (gratis): https://datafordeler.dk
- * Docs: https://confluence.sdfi.dk/pages/viewpage.action?pageId=16056582
+ * Docs: https://confluence.sdfi.dk/x/BgH1 (bemærk: REST-tjenesten
+ * udfases ultimo 2026 - mapping-laget her er adskilt fra HTTP-kaldet,
+ * så skiftet til afløseren kun rammer datafordeler.ts + felt-navnene).
  *
- * Relevante kald:
- *  - /BBRPublic/1/rest/bygning?husnummer={dawaId}  -> bygninger (byggeår, anvendelse, arealer, tag)
- *  - /BBRPublic/1/rest/enhed?bygning={bygningId}   -> enheder/lejemål
+ * Kald:
+ *  - BBR/BBRPublic/1/REST/bygning?husnummer={dawaId}  -> bygninger
+ *  - BBR/BBRPublic/1/REST/enhed?bygning={id_lokalId}  -> enheder/lejemål
+ *
+ * OBS: Felt-mapningen er skrevet efter BBR's grunddatamodel, men er
+ * ikke live-testet endnu - kør `node scripts/test-datafordeler.mjs`
+ * og justér, hvis et felt afviger.
  */
+
+/** BBR-kodelister (uddrag af de hyppigste koder) */
+const TAG_KODER: Record<string, string> = {
+  "1": "Tagpap (built-up)",
+  "2": "Tagpap (med hældning)",
+  "3": "Fibercement (asbest)",
+  "4": "Betontagsten",
+  "5": "Tegl",
+  "6": "Metal",
+  "7": "Stråtag",
+  "10": "Fibercement (uden asbest)",
+  "11": "Plast",
+  "12": "Glas",
+  "20": "Grønt tag",
+  "80": "Ukendt",
+  "90": "Andet",
+};
+
+const YDERVAEG_KODER: Record<string, string> = {
+  "1": "Mursten",
+  "2": "Letbeton",
+  "3": "Fibercement (asbest)",
+  "4": "Bindingsværk",
+  "5": "Træ",
+  "6": "Betonelementer",
+  "8": "Metal",
+  "10": "Fibercement (uden asbest)",
+  "11": "Plast",
+  "12": "Glas",
+  "80": "Ukendt",
+  "90": "Andet",
+};
+
+const VARME_KODER: Record<string, string> = {
+  "1": "Fjernvarme/blokvarme",
+  "2": "Centralvarme, ét fyringsanlæg",
+  "3": "Ovne",
+  "5": "Varmepumpe",
+  "6": "Centralvarme, to fyringsanlæg",
+  "7": "Elovne",
+  "8": "Gasradiatorer",
+  "9": "Ingen varmeinstallation",
+};
+
+interface BbrBygningRaa {
+  id_lokalId: string;
+  status?: string;
+  byg007Bygningsnummer?: number;
+  byg021BygningensAnvendelse?: string;
+  byg026Opførelsesår?: number;
+  byg027OmTilbygningsår?: number;
+  byg032YdervæggensMateriale?: string;
+  byg033Tagdækningsmateriale?: string;
+  byg038SamletBygningsareal?: number;
+  byg039BygningensSamledeBoligAreal?: number;
+  byg040BygningensSamledeErhvervsAreal?: number;
+  byg054AntalEtager?: number;
+  byg056Varmeinstallation?: string;
+}
+
+interface BbrEnhedRaa {
+  id_lokalId: string;
+  status?: string;
+  enh020EnhedensAnvendelse?: string;
+  enh026EnhedensSamledeAreal?: number;
+  enh027ArealTilBeboelse?: number;
+  enh028ArealTilErhverv?: number;
+  enh031AntalVærelser?: number;
+}
+
+/** BBR-status 6 = opført, 7 = gældende - resten er anmeldelser/historik */
+const AKTIVE_STATUSSER = new Set(["6", "7"]);
+
 export class RealBbrClient implements BbrClient {
-  async hentBygningsdata(_adresse: AdresseMatch): Promise<BbrData> {
-    // TODO:
-    // 1. Kald bygning-endpointet med brugernavn/adgangskode fra
-    //    DATAFORDELER_USERNAME / DATAFORDELER_PASSWORD.
-    // 2. Summer arealer og enheder på tværs af bygninger på grunden.
-    // 3. Map anvendelseskoder (140 = etagebolig, 150 = blandet, ...) til tekst.
-    throw new IkkeImplementeret("BBR", "Opret tjenestebruger på datafordeler.dk.");
+  async hentBygningsdata(adresse: AdresseMatch): Promise<BbrData> {
+    const { datafordelerHent } = await import("./datafordeler");
+
+    // DAWA's adgangsadresse-id er identisk med DAR-husnummerets id,
+    // som BBR's bygninger er knyttet til.
+    const bygningerRaa = await datafordelerHent<BbrBygningRaa[]>(
+      "BBR/BBRPublic/1/REST/bygning",
+      { husnummer: adresse.id, pagesize: 50 }
+    );
+
+    const bygninger = bygningerRaa.filter(
+      (b) => !b.status || AKTIVE_STATUSSER.has(String(b.status))
+    );
+    if (bygninger.length === 0) {
+      throw new Error(`BBR: ingen aktive bygninger fundet for ${adresse.betegnelse}`);
+    }
+
+    // Primær bygning = den med størst boligareal (materialer/byggeår tages herfra)
+    const primaer = [...bygninger].sort(
+      (a, b) => (b.byg039BygningensSamledeBoligAreal ?? 0) - (a.byg039BygningensSamledeBoligAreal ?? 0)
+    )[0];
+
+    // Hent enheder for alle bygninger på adressen
+    const enhederRaa: BbrEnhedRaa[] = [];
+    for (const byg of bygninger) {
+      const e = await datafordelerHent<BbrEnhedRaa[]>("BBR/BBRPublic/1/REST/enhed", {
+        bygning: byg.id_lokalId,
+        pagesize: 100,
+      });
+      enhederRaa.push(...e.filter((x) => !x.status || AKTIVE_STATUSSER.has(String(x.status))));
+    }
+
+    const enheder = enhederRaa.map((e, i) => {
+      // Enhedsanvendelseskoder < 200 er beboelse; erhverv ligger højere
+      const erhverv = Number(e.enh020EnhedensAnvendelse ?? 0) >= 200;
+      return {
+        adresse: `${adresse.vejnavn} ${adresse.husnr}, enhed ${i + 1}`,
+        anvendelse: erhverv ? "Erhverv" : "Bolig",
+        areal: e.enh026EnhedensSamledeAreal ?? e.enh027ArealTilBeboelse ?? 0,
+        vaerelser: e.enh031AntalVærelser ?? null,
+        erhverv,
+      };
+    });
+
+    const boligareal = bygninger.reduce((s, b) => s + (b.byg039BygningensSamledeBoligAreal ?? 0), 0);
+    const erhvervsareal = bygninger.reduce((s, b) => s + (b.byg040BygningensSamledeErhvervsAreal ?? 0), 0);
+    const antalBolig = enheder.filter((e) => !e.erhverv).length;
+    const antalErhverv = enheder.filter((e) => e.erhverv).length;
+
+    // Map til appens interne anvendelses-bucket (styrer screening-filtret):
+    // "150" = blandet bolig/erhverv, "140" = ren beboelse (etage m.m.)
+    const raaKode = primaer.byg021BygningensAnvendelse ?? "";
+    const blandet = boligareal > 0 && erhvervsareal > 0;
+    const anvendelseskode = blandet ? "150" : boligareal > 0 ? "140" : raaKode;
+    const anvendelseTekst = blandet
+      ? `Blandet bolig og erhverv (BBR-kode ${raaKode})`
+      : boligareal > 0
+        ? `Beboelsesejendom (BBR-kode ${raaKode})`
+        : `BBR-kode ${raaKode}`;
+
+    return {
+      byggeaar: primaer.byg026Opførelsesår ?? 0,
+      omTilbygningsaar: primaer.byg027OmTilbygningsår ?? null,
+      anvendelseskode,
+      anvendelseTekst,
+      samletBoligareal: boligareal,
+      samletErhvervsareal: erhvervsareal,
+      antalBoligenheder: antalBolig,
+      antalErhvervsenheder: antalErhverv,
+      antalEtager: Math.max(...bygninger.map((b) => b.byg054AntalEtager ?? 1)),
+      tagmateriale: TAG_KODER[primaer.byg033Tagdækningsmateriale ?? ""] ?? primaer.byg033Tagdækningsmateriale ?? null,
+      ydervaegsmateriale: YDERVAEG_KODER[primaer.byg032YdervæggensMateriale ?? ""] ?? primaer.byg032YdervæggensMateriale ?? null,
+      varmeinstallation: VARME_KODER[primaer.byg056Varmeinstallation ?? ""] ?? primaer.byg056Varmeinstallation ?? null,
+      enheder,
+    };
   }
 }
 
