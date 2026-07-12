@@ -20,6 +20,8 @@ export interface AdresseMatch {
   /** Matrikelnummer + ejerlav */
   matrikelnr: string;
   ejerlav: string;
+  /** Ejerlavskode - bruges til jordstykke-opslag (kun sat af rigtige kilder) */
+  ejerlavKode?: string;
   /** ESR/BFE-ejendomsnummer til opslag i vurdering og tingbog */
   bfeNummer: string;
 }

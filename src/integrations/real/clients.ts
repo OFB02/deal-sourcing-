@@ -105,6 +105,7 @@ export class RealDawaClient implements DawaClient {
       kommunekode: a.kommune.kode,
       matrikelnr: matrikelnr ?? "",
       ejerlav: a.ejerlav?.navn ?? a.jordstykke?.ejerlav?.navn ?? "",
+      ejerlavKode: ejerlavkode ? String(ejerlavkode) : undefined,
       bfeNummer,
     };
   }
@@ -172,6 +173,7 @@ const VARME_KODER: Record<string, string> = {
 interface BbrBygningRaa {
   id_lokalId: string;
   status?: string;
+  jordstykke?: string;
   byg007Bygningsnummer?: number;
   byg021BygningensAnvendelse?: string;
   byg026Opførelsesår?: number;
@@ -204,14 +206,42 @@ export class RealBbrClient implements BbrClient {
 
     // DAWA's adgangsadresse-id er identisk med DAR-husnummerets id,
     // som BBR's bygninger er knyttet til.
-    const bygningerRaa = await datafordelerHent<BbrBygningRaa[]>(
+    const paaHusnummer = await datafordelerHent<BbrBygningRaa[]>(
       "BBR/BBRPublic/1/REST/bygning",
       { husnummer: adresse.id, pagesize: 50 }
     );
 
-    const bygninger = bygningerRaa.filter(
+    let bygninger = paaHusnummer.filter(
       (b) => !b.status || AKTIVE_STATUSSER.has(String(b.status))
     );
+
+    // Ét husnummer er kun én opgang - hele ejendommen ligger på
+    // jordstykket, så genopslå pr. jordstykke for at fange alle
+    // bygninger. Bygningen kan endda være registreret på en NABO-opgangs
+    // husnummer, så finder husnummer-opslaget intet, udledes jordstykket
+    // i stedet via DAWA (featureid = BBR's jordstykke-id, live-verificeret).
+    let jordstykke = bygninger.find((b) => b.jordstykke)?.jordstykke;
+    if (!jordstykke && adresse.ejerlavKode && adresse.matrikelnr) {
+      try {
+        const js = await fetch(
+          `https://api.dataforsyningen.dk/jordstykker/${adresse.ejerlavKode}/${encodeURIComponent(adresse.matrikelnr)}`
+        );
+        if (js.ok) jordstykke = String((await js.json()).featureid ?? "") || undefined;
+      } catch {
+        // fallback må ikke vælte opslaget
+      }
+    }
+    if (jordstykke) {
+      const paaJordstykke = await datafordelerHent<BbrBygningRaa[]>(
+        "BBR/BBRPublic/1/REST/bygning",
+        { jordstykke, pagesize: 100 }
+      );
+      const aktive = paaJordstykke.filter(
+        (b) => !b.status || AKTIVE_STATUSSER.has(String(b.status))
+      );
+      if (aktive.length > 0) bygninger = aktive;
+    }
+
     if (bygninger.length === 0) {
       throw new Error(`BBR: ingen aktive bygninger fundet for ${adresse.betegnelse}`);
     }
@@ -362,23 +392,61 @@ export class RealStatstidendeClient implements StatstidendeClient {
 }
 
 /**
- * Ejendomssøgning til områdescreening - bygget alene på gratis kilder:
- *  1. DAWA: alle adgangsadresser i et postnr:
- *     https://api.dataforsyningen.dk/adgangsadresser?postnr=2200&struktur=nestet
- *     (åbent, ingen nøgle; brug per_side + side til paginering)
- *  2. BBR (Datafordeler): filtrér på anvendelseskode 140/150 og
- *     antal enheder inden for kriterierne.
+ * Ejendomssøgning til områdescreening - bygget alene på gratis kilder.
  *
- * VIGTIGT ved rigtig drift: et postnr har tusindvis af adresser, så
- * BBR-opslagene bør køres som batch-job med lokal caching (tabellen kan
- * genopfriskes fx ugentligt) i stedet for live pr. screening. Det holder
- * antallet af API-kald nede og gør screeningen hurtig og stabil.
+ * Strategi (live-verificeret):
+ *  1. Hent ALLE enhedsadresser i postnummeret fra DAWA i ét kald
+ *     (struktur=mini) og tæl enheder pr. adgangsadresse/opgang.
+ *     Det finder udlejningsejendommene uden ét eneste BBR-kald.
+ *  2. Tag opgangene med flest enheder (kandidater), slå dem fuldt op
+ *     og dedupliker pr. ejerlav+matrikel, så samme ejendom med flere
+ *     opgange kun screenes én gang.
+ *  3. BBR-filtreringen (arealer, anvendelse, præcist enhedstal) sker
+ *     bagefter i screening-laget via BbrClient.
+ *
+ * KANDIDAT_LOFT begrænser hvor mange ejendomme der BBR-screenes live
+ * pr. kørsel. Ved rigtig drift bør hele flowet køres som batch-job
+ * med lokal cache (fx ugentligt), så loftet kan fjernes.
  */
+const KANDIDAT_LOFT = 30;
+
 export class RealEjendomsSoegningClient implements EjendomsSoegningClient {
-  async findAdresser(_postnr: string): Promise<AdresseMatch[]> {
-    // TODO: Hent adgangsadresser fra DAWA (paginér), dedupliker pr.
-    // opgang/ejendom (samme jordstykke) og returnér AdresseMatch-listen.
-    // BBR-filtreringen sker i screening-laget via BbrClient.
-    throw new IkkeImplementeret("Ejendomssøgning", "Bygger på åbne DAWA + BBR.");
+  private base = "https://api.dataforsyningen.dk";
+
+  async findAdresser(postnr: string): Promise<AdresseMatch[]> {
+    // 1. Enhedsadresser -> antal pr. opgang
+    const antalPrOpgang = new Map<string, number>();
+    for (let side = 1; side <= 10; side++) {
+      const res = await fetch(
+        `${this.base}/adresser?postnr=${postnr}&struktur=mini&per_side=10000&side=${side}`
+      );
+      if (!res.ok) throw new Error(`DAWA-fejl ved adresseliste: HTTP ${res.status}`);
+      const rows: { adgangsadresseid: string }[] = await res.json();
+      for (const r of rows) {
+        antalPrOpgang.set(r.adgangsadresseid, (antalPrOpgang.get(r.adgangsadresseid) ?? 0) + 1);
+      }
+      if (rows.length < 10000) break;
+    }
+
+    // 2. Kandidater: flest enheder først (mindst 3 enheder pr. opgang -
+    //    den præcise lejemåls-filtrering sker mod BBR i screening-laget)
+    const kandidater = [...antalPrOpgang.entries()]
+      .filter(([, antal]) => antal >= 3)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, KANDIDAT_LOFT * 2); // hent ekstra: dedup pr. matrikel skærer ned
+
+    const dawa = new RealDawaClient();
+    const set = new Map<string, AdresseMatch>();
+    const BATCH = 8;
+    for (let i = 0; i < kandidater.length && set.size < KANDIDAT_LOFT; i += BATCH) {
+      const batch = kandidater.slice(i, i + BATCH);
+      const opslag = await Promise.all(batch.map(([id]) => dawa.hentAdresse(id)));
+      for (const a of opslag) {
+        if (!a) continue;
+        const noegle = `${a.ejerlav}|${a.matrikelnr}`;
+        if (!set.has(noegle) && set.size < KANDIDAT_LOFT) set.set(noegle, a);
+      }
+    }
+    return [...set.values()];
   }
 }
